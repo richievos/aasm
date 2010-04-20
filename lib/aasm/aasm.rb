@@ -6,69 +6,119 @@ module AASM
   end
 
   def self.included(base) #:nodoc:
-    base.extend AASM::ClassMethods
+    base.extend AASM::DSLClassMethods
+    base.extend AASM::NamespacedClassMethods
+
     AASM::Persistence.set_persistence(base)
     unless AASM::StateMachine[base]
       AASM::StateMachine[base] = AASM::StateMachine.new('')
     end
   end
 
-  module ClassMethods
-    def inherited(klass)
-      AASM::StateMachine[klass] = AASM::StateMachine[self].clone
-      super
+  class ConfigurationHandler
+    def initialize(base)
+      @base = base
     end
 
-    def aasm_initial_state(set_state=nil)
+    def initial_state(set_state=nil)
       if set_state
-        AASM::StateMachine[self].initial_state = set_state
+        AASM::StateMachine[@base].initial_state = set_state
       else
-        AASM::StateMachine[self].initial_state
+        AASM::StateMachine[@base].initial_state
       end
     end
 
-    def aasm_initial_state=(state)
-      AASM::StateMachine[self].initial_state = state
+    def initial_state=(state)
+      AASM::StateMachine[@base].initial_state = state
     end
 
-    def aasm_state(name, options={})
-      sm = AASM::StateMachine[self]
+    def state(name, options={})
+      sm = AASM::StateMachine[@base]
       sm.create_state(name, options)
       sm.initial_state = name unless sm.initial_state
 
-      define_method("#{name.to_s}?") do
-        aasm_current_state == name
+      @base.class_eval do
+        define_method("#{name.to_s}?") do
+          aasm_current_state == name
+        end
       end
     end
 
-    def aasm_event(name, options = {}, &block)
-      sm = AASM::StateMachine[self]
+    def event(name, options = {}, &block)
+      sm = AASM::StateMachine[@base]
 
       unless sm.events.has_key?(name)
         sm.events[name] = AASM::SupportingClasses::Event.new(name, options, &block)
       end
 
-      define_method("#{name.to_s}!") do |*args|
-        aasm_fire_event(name, true, *args)
-      end
+      @base.class_eval do
+        define_method("#{name.to_s}!") do |*args|
+          aasm_fire_event(name, true, *args)
+        end
 
-      define_method("#{name.to_s}") do |*args|
-        aasm_fire_event(name, false, *args)
+        define_method("#{name.to_s}") do |*args|
+          aasm_fire_event(name, false, *args)
+        end
       end
+    end
+
+    def states
+      AASM::StateMachine[@base].states
+    end
+
+    def events
+      AASM::StateMachine[@base].events
+    end
+
+    def states_for_select
+      AASM::StateMachine[@base].states.map { |state| state.for_select }
+    end
+  end
+
+  module DSLClassMethods
+    def inherited(klass)
+      AASM::StateMachine[klass] = AASM::StateMachine[self].clone
+      @aasm_configuration_handler = ConfigurationHandler.new(self)
+      super
+    end
+
+    def aasm_configure(&block)
+      aasm_configuration_handler.instance_eval &block
+    end
+
+    def aasm_configuration_handler
+      @aasm_configuration_handler ||= ConfigurationHandler.new(self)
+    end
+  end
+
+  module NamespacedClassMethods
+    def aasm_initial_state(set_state=nil)
+      aasm_configuration_handler.initial_state(set_state)
+    end
+
+    def aasm_initial_state=(state)
+      aasm_configuration_handler.initial_state=(state)
+    end
+
+    def aasm_state(name, options={})
+      aasm_configuration_handler.state(name, options)
+    end
+
+    def aasm_event(name, options = {}, &block)
+      aasm_configuration_handler.event(name, options, &block)
     end
 
     def aasm_states
-      AASM::StateMachine[self].states
+      aasm_configuration_handler.states
     end
 
     def aasm_events
-      AASM::StateMachine[self].events
+      aasm_configuration_handler.events
     end
 
     def aasm_states_for_select
-      AASM::StateMachine[self].states.map { |state| state.for_select }
+      aasm_configuration_handler.states_for_select
     end
-
   end
 
   # Instance methods

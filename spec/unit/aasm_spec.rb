@@ -2,16 +2,18 @@ require File.join(File.dirname(__FILE__), '..', 'spec_helper')
 
 class Foo
   include AASM
-  aasm_initial_state :open
-  aasm_state :open, :exit => :exit
-  aasm_state :closed, :enter => :enter
+  aasm_configure do
+    initial_state :open
+    state :open, :exit => :exit
+    state :closed, :enter => :enter
 
-  aasm_event :close, :success => :success_callback do
-    transitions :to => :closed, :from => [:open]
-  end
+    event :close, :success => :success_callback do
+      transitions :to => :closed, :from => [:open]
+    end
 
-  aasm_event :null do
-    transitions :to => :closed, :from => [:open], :guard => :always_false
+    event :null do
+      transitions :to => :closed, :from => [:open], :guard => :always_false
+    end
   end
 
   def always_false
@@ -35,11 +37,13 @@ end
 class Bar
   include AASM
 
-  aasm_state :read
-  aasm_state :ended
+  aasm_configure do
+    state :read
+    state :ended
 
-  aasm_event :foo do
-    transitions :to => :ended, :from => [:read]
+    event :foo do
+      transitions :to => :ended, :from => [:read]
+    end
   end
 end
 
@@ -48,15 +52,18 @@ end
 
 class Banker
   include AASM
-  aasm_initial_state  Proc.new { |banker| banker.rich? ? :retired : :selling_bad_mortgages }
-  aasm_state          :retired
-  aasm_state          :selling_bad_mortgages
+  
+  aasm_configure do
+    initial_state  Proc.new { |banker| banker.rich? ? :retired : :selling_bad_mortgages }
+    state          :retired
+    state          :selling_bad_mortgages
+  end
+
   RICH = 1_000_000
   attr_accessor :balance
   def initialize(balance = 0); self.balance = balance; end
   def rich?; self.balance >= RICH; end
 end
-
 
 describe AASM, '- class level definitions' do
   it 'should define a class level aasm_initial_state() method on its including class' do
